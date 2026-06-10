@@ -460,132 +460,178 @@ Calculates head rotation relative to the camera coordinate system:
 ## 🎓 Internship Viva Preparation (Top 50 Q&A)
 
 ### Project Overview & Rationale
+
 1. **Explain the objective of your project.**
    To build a low-latency driver monitoring system that detects drowsiness and distraction using standard webcams, applying risk engines and machine learning to trigger alerts and log telemetry.
+
 2. **What makes this system unique compared to standard drowsiness alarms?**
    It uses temporal smoothing to prevent false positives, 3D head pose estimation, ensemble machine learning predictions, and multi-stage escalations (including automated emails with screenshots).
+
 3. **What are the primary indicators of driver fatigue monitored?**
    Eye Aspect Ratio (EAR) for eye closures, Mouth Aspect Ratio (MAR) for yawns, and Head Pose angles for distraction and head drops.
+
 4. **Why did you choose a software-based approach over hardware sensors?**
    Software-based approaches are non-intrusive, cost-effective, and can run on existing hardware (like webcams and laptops) without requiring expensive sensors.
+
 5. **How is the system structured?**
    It uses a modular, layered architecture following SOLID principles, decoupling the presentation, orchestration, core processing, infrastructure, and database layers.
 
 ### Computer Vision & Facial Landmarks
+
 6. **What is MediaPipe Face Mesh?**
    A lightweight deep learning model from Google that estimates 468 3D facial landmarks in real-time, optimized for mobile and edge devices.
+
 7. **How does the system calculate EAR?**
    EAR measures eyelid openness by dividing the vertical distances between eyelids by the horizontal distance between the eye corners.
+
 8. **What is the mathematical formula for EAR?**
    $$\text{EAR} = \frac{||p_2 - p_6|| + ||p_3 - p_5||}{2 ||p_1 - p_4||}$$
+
 9. **How does the system detect yawns using MAR?**
    It calculates the vertical-to-horizontal ratio of the inner lip landmarks. If the ratio exceeds the set threshold for more than 1.5 seconds, it registers a yawn.
+
 10. **Explain how 3D Head Pose Estimation is solved.**
     It maps 2D landmarks in the frame to a generic 3D face model, then uses OpenCV's `solvePnP` method to solve the perspective projection and obtain rotation angles.
+
 11. **What is the significance of the rotation vector returned by `solvePnP`?**
     It represents the 3D rotation of the head relative to the camera, which is decomposed into Pitch, Yaw, and Roll angles.
+
 12. **How do you filter out false positives from normal blinks?**
     Blinks are short (typically 100-400ms). The system ignores eye closures under 1.5 seconds, and only triggers alarms if the eye remains closed past 3.0 seconds.
+
 13. **Why did you avoid full-face mesh tessellation rendering?**
     Full-face mesh rendering is visually cluttered and uses unnecessary CPU resources. We use thin neon cyan contours and orange iris circles for a clean, modern aesthetic.
+
 14. **How does the system track iris movements?**
     It queries landmarks 468-477 to outline the iris circles, verifying that the driver's eyes are open and tracked.
+
 15. **What is the purpose of the nose tip projection line on the UI?**
     It draws a line from the nose tip to show the driver's gaze vector, visualizing their direction of attention.
 
 ### Risk Engine & State Management
+
 16. **How does the Risk Engine work?**
     It accumulates frame-level violation scores in a temporal sliding window (e.g. 10 frames), smoothing out noise to determine the active risk state.
+
 17. **What are the four risk states in the system?**
     `Safe` (attentive), `Warning` (minor fatigue/distraction), `Danger` (immediate hazard), and `Critical` (persistent danger).
+
 18. **How do scores map to risk states?**
     Scores under 2 map to `Safe`, scores between 2 and 4 map to `Warning`, scores between 4 and 12 map to `Danger`, and scores 12 and above map to `Critical`.
+
 19. **How is the head-drop alarm defined?**
     If the head pitch angle drops below $-12^\circ$ for more than 2.0 seconds, indicating the chin is resting near the chest, the alarm is triggered.
+
 20. **Why does the system allow looking away for up to 35 seconds?**
     This permits normal driving actions like checking side mirrors or blind spots while still alerting on prolonged distractions.
 
 ### Machine Learning Pipeline
+
 21. **How is machine learning used in the system?**
     It computes physiological frequencies (blinks, yawns, head drops) from session data to predict long-term driver fatigue.
+
 22. **What features are passed to the ML models?**
     Blink Frequency, Yawn Frequency, Head Drop Frequency, and Average Historical Risk.
+
 23. **Which ML algorithms are implemented?**
     Logistic Regression and Random Forest.
+
 24. **How does the ensemble classifier make predictions?**
     It averages the class probabilities returned by both models. If the ensemble probability exceeds 50%, the driver is classified as `Fatigued`.
+
 25. **Why standardise features before training?**
     Features have different scales (e.g. risk score is 0-6, while blink frequency is blinks/minute). Standardization ensures all features contribute equally to the model.
 
 ### Database & Telemetry Logging
+
 26. **What database is used, and why?**
     SQLite3. It is a lightweight, serverless relational database that is easy to manage locally.
+
 27. **What tables are defined in the schema?**
     `users` (driver profiles), `settings` (threshold preferences), `sessions` (driving logs), and `events` (telemetry alerts).
+
 28. **How does the system prevent database write lockups?**
     It uses a thread-safe connection context manager and enforces logging cooldowns (e.g. minimum 2-second gap between duplicate events).
+
 29. **What is logged in the `events` table?**
     Session ID, timestamp, event type, EAR/MAR values, head pitch/yaw/roll angles, and the action taken.
+
 30. **How does the dashboard query historical records?**
     It uses Pandas to read session and event tables, displaying stats for the last 10 sessions.
 
 ### Alerting & Multi-stage Escalation
+
 31. **Explain the multi-stage alert escalation system.**
     - Level 0 (Safe): Silent.
     - Level 1 (Yawning): Soft beep and break recommendation.
     - Level 2 (Distraction): Soft chime and visual warning.
     - Level 3 (Danger): Continuous alarm and speech warnings.
     - Level 4 (Critical): SMTP email alerts sent to emergency contacts.
+
 32. **How are voice alerts implemented?**
     They use a background worker thread and a queue to send spoken alerts via the local `pyttsx3` engine without freezing the camera feed.
+
 33. **What audio library is used?**
     Pygame Mixer. It is a low-latency library that plays audio files asynchronously.
+
 34. **What triggers the emergency email?**
     It is triggered if the eye-closed alarm sounds for the 4th time in a session, or if the driver remains in a `Critical` state for more than 4.0 seconds.
+
 35. **What details are included in the email alert?**
     Driver profile name, risk status, session statistics (alerts, yawns, head drops), EAR/MAR metrics, and a violation screenshot.
 
 ### System Performance & Engineering
+
 36. **How does the camera manager thread improve performance?**
     It runs the frame capture loop on a separate thread, ensuring the main application loop always has immediate access to the latest frame.
+
 37. **What is the average CPU utilization of the system?**
     Under 15% on standard laptops, and around 12% on Raspberry Pi 4 configurations when running in headless CLI mode.
+
 38. **How does the system handle webcam connection failures?**
     The camera thread catches the exception, releases resources, and safely displays an offline status message.
+
 39. **Why is the email dispatcher run on a separate thread?**
     SMTP connections can take up to 3 seconds to establish. Running this on a background thread prevents the camera monitoring loop from freezing.
+
 40. **How do you handle Windows COM apartment thread issues in `pyttsx3`?**
     We initialize the `pyttsx3` engine inside the background thread loop, keeping its COM context self-contained.
 
 ### Social Impact & Real-world Relevance
+
 41. **What is the social relevance of this project?**
     It helps prevent fatigue-related road accidents, protecting drivers, passengers, and cargo.
+
 42. **Who are the primary target users?**
     Commercial truck drivers, delivery fleets, public transport operators, and night-shift workers.
+
 43. **Is the system fully GDPR compliant?**
     Yes. All video processing and database logging are executed locally on the device, and no data is uploaded to external servers.
+
 44. **What are the limitations of the current system?**
     It requires adequate cabin lighting to track landmarks, and can be blocked by sunglasses that do not pass infrared light.
+
 45. **How would you deploy this in a commercial vehicle?**
     By running it on a dashboard-mounted edge device (like a Jetson Nano or Raspberry Pi) connected to an infrared camera.
 
 ### Future Scope & Enhancements
+
 46. **How would you improve the system for night driving?**
     By replacing the standard webcam with an active infrared (IR) camera and IR LEDs to illuminate the driver's face in the dark.
+
 47. **What is the purpose of PPG heart rate tracking?**
     It measures heart rate variability through the camera feed to monitor the driver's autonomic nervous system, providing an additional indicator of fatigue.
+
 48. **How would you optimize the system for edge hardware?**
     By compiling models to TensorRT, enabling GPU delegation in MediaPipe, and implementing frame skipping.
+
 49. **Can the system connect to vehicle telemetry?**
     Yes, it can connect to the vehicle's CAN bus interface to correlate driver fatigue with steering patterns and speed.
+
 50. **What license is the project released under?**
     The MIT License, allowing open-source contributions and commercial use.
 
 ---
 
-## 📄 License
-This project is licensed under the MIT License - see the [LICENSE](file:///c:/Users/ASHIK/Desktop/Drowsiness%20Prevention%20System/LICENSE) file for details.
-
----
 
 *Developed with 🛡️ by Ashik for Driver Safety and Advanced ADAS Research.*
