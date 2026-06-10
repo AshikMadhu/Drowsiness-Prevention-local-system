@@ -168,7 +168,7 @@ Follow these steps to set up the project on your local machine:
 ### 1. Clone the Repository
 Open a terminal (Command Prompt, PowerShell, or bash) and run:
 ```bash
-git clone https://github.com/yourusername/drowsiness-prevention-system.git
+git clone https://github.com/AshikMadhu/Driver-Drowsiness-Prevention-System.git
 cd "Drowsiness Prevention System"
 ```
 
