@@ -79,18 +79,13 @@ logs/
 USER_GUIDE.md
 VIVA_QUESTIONS.md
 audit_report.md
-cli_runner.py
-config.py
-launcher.py
-main.py
 qa_test_matrix.md
 repository_health_report.md
-requirements.txt
-train_model.py
 ARCHITECTURE.md
 DEMO_SCRIPT.md
 IMPACT_STATEMENT.md
 INSTALLATION.md
 PRESENTATION_CONTENT.md
 PROJECT_REPORT.md
+
 
