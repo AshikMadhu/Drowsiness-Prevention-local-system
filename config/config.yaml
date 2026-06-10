@@ -1,0 +1,44 @@
+# Driver Safety & Drowsiness Prevention System Configurations
+
+system:
+  debug_mode: true
+  log_level: "INFO"
+  camera_source: 0
+  frame_width: 640
+  frame_height: 480
+  log_file_path: "logs/driver_safety.log"
+
+cv_engine:
+  mediapipe:
+    static_image_mode: false
+    max_num_faces: 1
+    refine_landmarks: true
+    min_detection_confidence: 0.5
+    min_tracking_confidence: 0.5
+
+algorithms:
+  # Calibration configuration
+  calibration_frames: 100
+  
+  # Eye, Mouth, and Gaze mathematical thresholds
+  ear_threshold: 0.22             # Eye Aspect Ratio threshold (below = closed)
+  mar_threshold: 0.50             # Mouth Aspect Ratio threshold (above = yawning)
+  gaze_threshold: 15.0            # Off-road deviation angle threshold (degrees)
+  
+  # Timing thresholds (duration in seconds)
+  eye_closure_warn_time: 1.2
+  eye_closure_alarm_time: 2.2
+  yawn_warn_time: 2.5
+  distraction_warn_time: 3.0
+
+audio:
+  sound:
+    warning_chime: "data/audio/warning_chime.wav"
+    critical_alarm: "data/audio/critical_alarm.wav"
+  tts:
+    rate: 150
+    volume: 1.0
+    voice_index: 0
+
+database:
+  db_path: "data/driver_safety.db"
