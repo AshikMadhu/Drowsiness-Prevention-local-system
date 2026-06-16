@@ -34,6 +34,10 @@ class NotificationService:
         self.eye_closed_alarm_active = False
         self.eye_closed_alarm_count = 0
         
+        # General danger/critical alarm repeat tracking
+        self.danger_alarm_active = False
+        self.danger_alarm_count = 0
+        
         self.current_level = self.LEVEL_0_NONE
         
         # State tracking for Level 4 Emergency Escalation
@@ -77,6 +81,20 @@ class NotificationService:
                     self._send_fourth_alarm_email(driver_name, ear, mar, pitch, yaw, frame, session_id)
         else:
             self.eye_closed_alarm_active = False
+            
+        # Check transition to any danger/critical alarm (risk_level is Danger or Critical)
+        is_danger_alarm = risk_level in ["Danger", "Critical"]
+        if is_danger_alarm:
+            if not self.danger_alarm_active:
+                self.danger_alarm_active = True
+                self.danger_alarm_count += 1
+                logger.info(f"NotificationService: General danger alarm triggered ({self.danger_alarm_count}).")
+                
+                if self.danger_alarm_count > 3:
+                    logger.warn(f"NotificationService: Danger alarm triggered more than 3 times ({self.danger_alarm_count}). Preparing emergency email report...")
+                    self._send_danger_alarm_email(driver_name, ear, mar, pitch, yaw, frame, session_id)
+        else:
+            self.danger_alarm_active = False
         
         # Reset and quiet state
         if risk_level == "Safe":
@@ -230,6 +248,71 @@ class NotificationService:
         self.email.send_emergency_alert(
             driver_name=driver_name,
             risk_level="Critical Emergency (4th Repeat)",
+            details=details,
+            image_path=str(screenshot_path) if screenshot_path else None,
+            subject=subject,
+            receiver="ashiksjc2025@gmail.com"
+        )
+
+        return self.current_level
+
+    def _send_danger_alarm_email(self, driver_name: str, ear: float, mar: float, pitch: float, yaw: float, frame, session_id: Optional[int]):
+        """Queries database stats, captures a screenshot, and sends details of repeat danger/critical alarm triggers."""
+        alert_count = 0
+        yawn_count = 0
+        head_drop_count = 0
+        
+        if session_id is not None and self.db_mgr is not None:
+            try:
+                with self.db_mgr.connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT COUNT(*) FROM events WHERE session_id = ? AND event_type != 'NORMAL';", (session_id,))
+                    alert_count = cursor.fetchone()[0]
+                    
+                    cursor.execute("SELECT COUNT(*) FROM events WHERE session_id = ? AND event_type = 'YAWN';", (session_id,))
+                    yawn_count = cursor.fetchone()[0]
+                    
+                    cursor.execute("SELECT COUNT(*) FROM events WHERE session_id = ? AND event_type = 'DISTRACTION' AND head_pitch < -12.0;", (session_id,))
+                    head_drop_count = cursor.fetchone()[0]
+            except Exception as db_err:
+                logger.error(f"NotificationService: Error querying repeating alarm stats: {db_err}")
+                
+        screenshot_path = None
+        if frame is not None and session_id is not None and self.evidence is not None:
+            try:
+                screenshot_path = self.evidence.capture_evidence(
+                    frame=frame,
+                    session_id=session_id,
+                    event_type="REPEATING_DANGER_ALARM",
+                    ear_value=ear,
+                    mar_value=mar,
+                    risk_level="Critical",
+                    force=True
+                )
+            except Exception as sc_err:
+                logger.error(f"NotificationService: Error capturing repeating alarm screenshot: {sc_err}")
+                
+        details = f"""
+        DETAILED REPORT ON REPEATED DANGER/CRITICAL ALARM EVENT:
+        - Current Session ID:      {session_id if session_id is not None else 'N/A'}
+        - Total Session Alerts:    {alert_count}
+        - Yawning Event Count:     {yawn_count}
+        - Head Drop Event Count:   {head_drop_count}
+        
+        CURRENT METRICS:
+        - EAR:                     {ear:.3f}
+        - MAR:                     {mar:.3f}
+        - Head Pitch:              {pitch:.2f} degrees
+        - Head Yaw:                {yaw:.2f} degrees
+        
+        Screenshot of safety violation is attached to this email.
+        """
+        
+        subject = f"🚨 REPEATED DANGER ALARM: Driver Safety Alert - {driver_name}"
+        
+        self.email.send_emergency_alert(
+            driver_name=driver_name,
+            risk_level=f"Critical Emergency (Danger Alarm Trigger #{self.danger_alarm_count})",
             details=details,
             image_path=str(screenshot_path) if screenshot_path else None,
             subject=subject,

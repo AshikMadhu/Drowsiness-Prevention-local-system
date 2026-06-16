@@ -22,12 +22,9 @@ class AudioManager:
         """Initializes the pygame audio mixer and pre-loads sound objects."""
         try:
             logger.info("Initializing Pygame Audio Mixer...")
-            pygame.mixer.init()
+            # Initialize with standard sample rate, bit size, channels, and buffer size
+            pygame.mixer.init(44100, -16, 2, 512)
             self.mixer_initialized = True
-            
-            # Setup dedicated channels
-            self.warning_channel = pygame.mixer.Channel(0)
-            self.critical_channel = pygame.mixer.Channel(1)
             
             # Load assets if they exist
             self._load_sounds()
@@ -70,8 +67,8 @@ class AudioManager:
             return
             
         try:
-            # Play once (loops=0)
-            self.warning_channel.play(self.warning_sound, loops=0)
+            # Play warning chime (automatically allocated to any free channel)
+            self.warning_sound.play(loops=0)
         except Exception as e:
             logger.error(f"Audio Manager: Failed to play warning sound: {e}")
 
@@ -81,21 +78,22 @@ class AudioManager:
             return
             
         try:
-            if not self.critical_channel.get_busy():
+            # Check if critical alarm is not already playing to prevent overlapping loops
+            if self.critical_sound.get_num_channels() == 0:
                 logger.info("Audio Manager: Starting continuous critical alarm loop.")
-                # Play continuously (loops=-1)
-                self.critical_channel.play(self.critical_sound, loops=-1)
+                self.critical_sound.play(loops=-1)
         except Exception as e:
             logger.error(f"Audio Manager: Failed to play critical sound: {e}")
 
     def stop_critical_alarm(self):
         """Stops the looping critical alarm."""
-        if not self.mixer_initialized:
+        if not self.mixer_initialized or not self.critical_sound:
             return
         try:
-            if self.critical_channel and self.critical_channel.get_busy():
+            # Stop all channels playing this critical alarm sound
+            if self.critical_sound.get_num_channels() > 0:
                 logger.info("Audio Manager: Stopping continuous critical alarm loop.")
-                self.critical_channel.stop()
+                self.critical_sound.stop()
         except Exception as e:
             logger.error(f"Audio Manager: Failed to stop critical sound: {e}")
 
